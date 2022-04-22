@@ -1,0 +1,4 @@
+(sym_lib_table
+  (lib (name "Zorro3")(type "KiCad")(uri "${KIPRJMOD}/Libs/Symbol/Zorro3.kicad_sym")(options "")(descr ""))
+  (lib (name "AS4C32M16SC")(type "KiCad")(uri "${KIPRJMOD}/Libs/Symbol/AS4C32M16SC.kicad_sym")(options "")(descr ""))
+)

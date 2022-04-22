@@ -1,0 +1,31 @@
+set -tmpdir "."
+set -xsthdpdir "."
+run
+-ifn IFN
+-ifmt mixed
+-ofn OFN
+-ofmt NGC
+-p xc9500xl
+-top GottaGoFaZt3r
+-opt_mode Area
+-opt_level 2
+-iuc no
+-keep_hierarchy No
+-netlist_hierarchy As_Optimized
+-rtlview No
+-hierarchy_separator /
+-bus_delimiter <>
+-case Maintain
+-verilog2001 YES
+-fsm_extract YES
+-fsm_encoding auto
+-safe_implementation No
+-mux_extract NO
+-resource_sharing YES
+-iobuf YES
+-pld_mp YES
+-pld_xp YES
+-pld_ce YES
+-wysiwyg NO
+-equivalent_register_removal YES
+-define {}
