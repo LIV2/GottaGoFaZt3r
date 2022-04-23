@@ -2,15 +2,12 @@
 
 module SDRAM(
     input [27:2] ADDR,
-    input DS0,
-    input DS1,
-    input DS2,
-    input DS3,
+    input [3:0] DS_n,
     input DOE,
     input FCS_n,
     input ram_cycle,
     input RESET_n,
-    input RW_n,
+    input RW,
     input CLK,
     input ECLK,
     input configured,
@@ -22,7 +19,7 @@ module SDRAM(
     output [1:0] CS_n,
     output WE_n,
     output reg CKE,
-    output reg [3:0] DQM,
+    output reg [3:0] DQM_n,
     output DTACK_EN
     );
 
@@ -32,10 +29,10 @@ localparam tRFC = 4;
 localparam CAS_LATENCY = 3'd2;
 
 `define initcmd(ARG) \
-{ras_n_i, cas_n_i, we_n_i} <= ARG;
+{ras_i_n, cas_i_n, we_i_n} <= ARG;
 
 `define cmd(ARG) \
-{ras_n_r, cas_n_r, we_n_r} <= ARG;
+{ras_r_n, cas_r_n, we_r_n} <= ARG;
 
 // RAS CAS WE
 localparam cmd_nop             = 3'b111,
@@ -56,14 +53,14 @@ localparam mode_register = {
   3'b0         // M2-0   - Burst length
 };
 
-reg [1:0] cs_n_i;
-reg ras_n_i;
-reg cas_n_i;
-reg we_n_i;
-reg [1:0] cs_n_r;
-reg ras_n_r;
-reg cas_n_r;
-reg we_n_r;
+reg [1:0] cs_i_n;
+reg ras_i_n;
+reg cas_i_n;
+reg we_i_n;
+reg [1:0] cs_r_n;
+reg ras_r_n;
+reg cas_r_n;
+reg we_r_n;
 
 reg [12:0] maddr_i;
 reg [12:0] maddr_r;
@@ -77,11 +74,11 @@ reg [1:0] refresh_request;
 reg refreshing;
 
 assign MADDR = (init_done) ? maddr_r : maddr_i;
-assign BA    = ba_r;
-assign CS_n   = (init_done) ? cs_n_r : cs_n_i;
-assign RAS_n  = (init_done) ? ras_n_r : ras_n_i;
-assign CAS_n  = (init_done) ? cas_n_r : cas_n_i;
-assign WE_n   = (init_done) ? we_n_r : we_n_i;
+assign BA     = ba_r;
+assign CS_n   = (init_done) ? cs_r_n : cs_i_n;
+assign RAS_n  = (init_done) ? ras_r_n : ras_i_n;
+assign CAS_n  = (init_done) ? cas_r_n : cas_i_n;
+assign WE_n   = (init_done) ? we_r_n : we_i_n;
 
 localparam init_cycle_precharge1 = 0,
            init_cycle_refresh1   = init_cycle_precharge1 + tRP,
@@ -92,10 +89,10 @@ localparam init_cycle_precharge1 = 0,
 
 always @(negedge CLK or negedge RESET_n) begin
   if (!RESET_n) begin
-    init_state <= init_cycle_precharge1;
-    init_done  <= 0;
-    maddr_i    <= 'b0;
-    cs_n_i      <= 2'b00;
+    init_state  <= init_cycle_precharge1;
+    init_done   <= 0;
+    maddr_i     <= 13'b0;
+    cs_i_n[1:0] <= 2'b00;
   end else begin
      // Ram Initialization //
       if (!init_done && configured) begin
@@ -126,7 +123,7 @@ always @(negedge CLK or negedge RESET_n) begin
           default:
             begin
               `initcmd(cmd_nop)
-              cs_n_i <= 2'b00;
+              cs_i_n[1:0] <= 2'b00;
             end
         endcase
       end
@@ -151,10 +148,11 @@ localparam access_cycle_start     = 5'b00000,
            refresh_cycle_auto     = refresh_cycle_pre+tRP,
            refresh_cycle_end      = refresh_cycle_auto+tRFC;
 
-assign refreshreset = !refreshing & RESET_n;
+wire refreshreset = !refreshing & RESET_n;
+
 always @(posedge ECLK or negedge refreshreset) begin
   if (!refreshreset) begin
-    refresh_timer <= 'h4;
+    refresh_timer <= 4'h4;
   end else begin
     if (refresh_timer > 0) begin
       refresh_timer <= refresh_timer - 1;
@@ -181,38 +179,42 @@ always @(posedge CLK or negedge RESET_n)
 begin
   if (!RESET_n) begin
     `cmd(cmd_nop)
-    maddr_r         <= 0;
-    ba_r            <= 2'b0;
-    CKE             <= 0;
-    dtack           <= 0;
-    refreshing      <= 0;
-    DQM             <= 4'b1111;
-    cs_n_r          <= 2'b11;
-    ram_state       <= 0;
+    maddr_r[12:0]   <= 13'b0;
+    ba_r[1:0]       <= 2'b0;
+    CKE             <= 1'b0;
+    dtack           <= 1'b0;
+    refreshing      <= 1'b0;
+    DQM_n[3:0]      <= 4'b1111;
+    cs_r_n[1:0]     <= 2'b11;
+    ram_state       <= 1'b0;
   end else begin
     if (ram_state == 0) begin
-      CKE        <= 1;
-      dtack      <= 0;
-      DQM        <= 4'b1111;
-      cs_n_r     <= 2'b11;
-      refreshing <= 0;
+      CKE         <= 1'b0;
+      dtack       <= 1'b0;
+      DQM_n[3:0]  <= 4'b1111;
+      cs_r_n[1:0] <= 2'b11;
+      refreshing  <= 1'b0;
       if (init_done) begin
+        // Refresh has the highest priority
+        // If refresh_request active, go do a refresh
         if (refresh_request[1] == 1) begin
           `cmd(cmd_precharge)
-          maddr_r[10]    <= 1; // Precharge all banks
-          cycle_type     <= ram_cycle_refresh;
-          ram_state[0]   <= 1;
-          cs_n_r         <= 2'b00; // Refresh all modules
-          refreshing     <= 1;
+          maddr_r[10]  <= 1'b1; // Precharge all banks
+          cycle_type   <= ram_cycle_refresh;
+          ram_state[0] <= 1'b1;
+          cs_r_n[1:0]  <= 2'b00; // Refresh all modules
+          refreshing   <= 1'b1;
+        // If refresh_request not active and we're in a ram cycle, go do a ram access
         end else if (ram_cycle_sync[1] && !FCS_n) begin
           `cmd(cmd_active)
-          cycle_type     <= ram_cycle_access;
-          ram_state[0]   <= 1;
-          maddr_r        <= ADDR[23:11];
-          ba_r           <= ADDR[25:24];
-          cs_n_r[1:0]    <= {ADDR[26],~ADDR[26]};
+          cycle_type    <= ram_cycle_access;
+          ram_state[0]  <= 1'b1;
+          maddr_r[12:0] <= ADDR[23:11];
+          ba_r[1:0]     <= ADDR[25:24];
+          cs_r_n[1:0]   <= {ADDR[26],~ADDR[26]};
+        // No refresh needed at this time and no memory access, idle
         end else begin
-          cs_n_r      <= 2'b11;
+          cs_r_n[1:0]    <= 2'b11;
           `cmd(cmd_nop)
         end
       end
@@ -226,7 +228,7 @@ begin
           // Wait for tRCD and also wait until we see data strobes before committing writes
           access_cycle_wait: begin
             `cmd(cmd_nop)
-            if (DS0 && DS1 && DS2 && DS3 && !RW_n || !DOE) begin // ! Is DOE needed here? no need to hold off on reads 
+            if (DS_n[3:0] == 4'b1111 && !RW || !DOE) begin // ! Is DOE needed here? no need to hold off on reads 
               ram_state <= access_cycle_wait;
             end
           end
@@ -239,13 +241,13 @@ begin
           access_cycle_rw: begin
             dtack <= 1;
             maddr_r[12:0] <= {3'b000,ADDR[27], ADDR[10:2]};
-            if (!RW_n) begin
+            if (!RW) begin
               `cmd(cmd_write)
-              DQM[3:0] <= {DS3, DS2, DS1, DS0};
+              DQM_n[3:0] <= DS_n[3:0];
             end else begin
               `cmd(cmd_read)
               // Reads must return a full long regardless of DS (Zorro III Bus Specifications pg 3-3)
-              DQM[3:0] <= 4'b0000;
+              DQM_n[3:0] <= 4'b0000;
             end
           end
 
@@ -256,8 +258,8 @@ begin
           access_cycle_hold: begin
             dtack <= 0;
             `cmd(cmd_nop)
-            if (!FCS_n && (!DS0 || !DS1 || !DS2 || !DS3)) begin
-              //if (RW_n)
+            if (!FCS_n && DS_n[3:0] != 4'b1111) begin
+              //if (RW)
                 CKE <= 0;
               ram_state <= access_cycle_hold;
             end else begin
@@ -297,7 +299,7 @@ end
 reg [3:0] dtack_delayed;
 always @(posedge CLK or negedge RESET_n) begin
   if (!RESET_n)
-    dtack_delayed[3:0] <= 'b0;
+    dtack_delayed[3:0] <= 4'b0;
   else
     dtack_delayed[3:0] <= {dtack_delayed[2:0], dtack};
 end

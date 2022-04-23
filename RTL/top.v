@@ -5,7 +5,7 @@ module GottaGoFaZt3r(
         input CFGIN_n,
         input CLK,
         input DOE,
-        input [3:0] DS,
+        input [3:0] DS_n,
         input E,
         input [2:0] FC,
         input FCS_n,
@@ -24,68 +24,75 @@ module GottaGoFaZt3r(
         output BUFOE_n,
         output CAS_n,
         output CKE,
-        output [1:0] CS,
+        output [1:0] CS_n,
         output [1:0] BA,
-        output [3:0] DQM,
+        output [3:0] DQM_n,
         output [12:0] MA,
         output MEMCLK,
         output RAS_n,
         output WE_n
     );
 
-assign MEMCLK = ~CLK;
+assign MEMCLK = ~CLK; 
 
-
-
-// Synchro
-reg [1:0] DS0_sync;
-reg [1:0] DS1_sync;
-reg [1:0] DS2_sync;
-reg [1:0] DS3_sync;
+// Synchronizers
+reg [1:0] DS0_n_sync;
+reg [1:0] DS1_n_sync;
+reg [1:0] DS2_n_sync;
+reg [1:0] DS3_n_sync;
 reg [1:0] FCS_n_sync;
 
 always @(posedge CLK or negedge RST_n)
 begin
   if (!RST_n) begin
-    DS0_sync[1:0]  <= 2'b11;
-    DS1_sync[1:0]  <= 2'b11;
-    DS2_sync[1:0]  <= 2'b11;
-    DS3_sync[1:0]  <= 2'b11;
+    DS0_n_sync[1:0] <= 2'b11;
+    DS1_n_sync[1:0] <= 2'b11;
+    DS2_n_sync[1:0] <= 2'b11;
+    DS3_n_sync[1:0] <= 2'b11;
     FCS_n_sync[1:0] <= 2'b11;
   end else begin
-    DS0_sync[1:0]  <= {DS0_sync[0], DS[0]};
-    DS1_sync[1:0]  <= {DS1_sync[0], DS[1]};
-    DS2_sync[1:0]  <= {DS2_sync[0], DS[2]};
-    DS3_sync[1:0]  <= {DS3_sync[0], DS[3]};
+    DS0_n_sync[1:0] <= {DS0_n_sync[0], DS_n[0]};
+    DS1_n_sync[1:0] <= {DS1_n_sync[0], DS_n[1]};
+    DS2_n_sync[1:0] <= {DS2_n_sync[0], DS_n[2]};
+    DS3_n_sync[1:0] <= {DS3_n_sync[0], DS_n[3]};
     FCS_n_sync[1:0] <= {FCS_n_sync[0], FCS_n};
-  end
-end
-
-reg [27:8] ADDR;
-reg match;
-wire [3:0] addr_match;
-wire autoconfig_cfgout;
-wire configured;
-
-always @(negedge FCS_n or negedge RST_n)
-begin
-  if (!RST_n) begin
-    ADDR <= 'b0;
-    match <= 1'b0;
-  end else begin
-    ADDR[27:8] <= A[27:8];
-    if (AD[31:28] == addr_match) begin
-      match <= (configured || A[27:24] == 4'hF);
-    end else begin
-      match <= 0;
-    end
   end
 end
 
 // Autoconf
 wire [3:0] autoconfig_dout;
 wire autoconfig_cycle;
-//wire autoconfig_cfgout;
+wire autoconfig_cfgout;
+wire configured;
+
+// addr_match comes from the autoconfig unit
+// At reset it is 4'hF to match autoconfig cycles
+// Autoconfig will then change addr_match to the new base address
+wire [3:0] addr_match;
+
+// Latch address bits 27-8 on FCS_n asserted
+// 
+// Also latch whether there's a match (rather than latching Address 31-28) 
+// Doing things this way saves a bunch of space in the CPLD
+
+reg [27:8] ADDR;
+reg match;
+
+always @(negedge FCS_n or negedge RST_n)
+begin
+  if (!RST_n) begin
+    ADDR  <= 20'b0;
+    match <= 1'b0;
+  end else begin
+    ADDR[27:8] <= A[27:8];
+    if (AD[31:28] == addr_match) begin
+      // Match 8 address bits when unconfigured (8'hFF) but only 4 when configured (256MB Blocks)
+      match <= (configured || A[27:24] == 4'hF);
+    end else begin
+      match <= 1'b0;
+    end
+  end
+end
 
 Autoconfig AUTOCONFIG (
   .match (match),
@@ -94,7 +101,7 @@ Autoconfig AUTOCONFIG (
   .FCS_n (FCS_n_sync[1]),
   .CLK (CLK),
   .READ (READ),
-  .DS_n (DS3_sync[1]),
+  .DS_n (DS3_n_sync[1]),
   .CFGIN_n (CFGIN_n),
   .DIN (AD[31:28]),
   .FC (FC[2:0]),
@@ -109,30 +116,29 @@ Autoconfig AUTOCONFIG (
 
 SDRAM SDRAM (
   .ADDR ({ADDR[27:8], A[7:2]}),
-  .DS0 (DS0_sync[1]),
-  .DS1 (DS1_sync[1]),
-  .DS2 (DS2_sync[1]),
-  .DS3 (DS3_sync[1]),
+  .DS_n ({DS3_n_sync[1], DS2_n_sync[1], DS1_n_sync[1], DS0_n_sync[1]}),
   .DOE (DOE),
   .FCS_n (FCS_n_sync[1]),
   .ram_cycle (ram_cycle),
   .RESET_n (RST_n),
-  .RW_n (READ),
+  .RW (READ),
   .CLK (CLK),
   .ECLK (E),
   .BA (BA),
   .MADDR (MA),
   .CAS_n (CAS_n),
   .RAS_n (RAS_n),
-  .CS_n (CS),
+  .CS_n (CS_n),
   .WE_n (WE_n),
   .CKE (CKE),
-  .DQM (DQM),
+  .DQM_n (DQM_n),
   .DTACK_EN (ram_dtack),
   .MTCR_n (MTCR_n),
   .configured (configured)
 );
 
+// Latch DTACK on strobe from SDRAM unit
+// Clear on cycle end
 FDCP FDCP_inst (
   .CLR (FCS_n),
   .PRE (1'b0),
@@ -140,13 +146,14 @@ FDCP FDCP_inst (
   .C (ram_dtack),
   .Q (dtack_latch)
 );
+
 reg bursting;
 
 always @(negedge MTCR_n or posedge FCS_n) begin
   if (FCS_n)
-    bursting <= 0;
+    bursting <= 1'b0;
   else
-    bursting <= 1;
+    bursting <= 1'b1;
 end
 
 assign AD[31:28] = (autoconfig_cycle && BERR_n && DOE && READ) ? autoconfig_dout[3:0] : 4'bZ;
