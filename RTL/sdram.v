@@ -189,7 +189,7 @@ begin
     ram_state       <= 1'b0;
   end else begin
     if (ram_state == 0) begin
-      CKE         <= 1'b0;
+      CKE         <= 1'b1;
       dtack       <= 1'b0;
       DQM_n[3:0]  <= 4'b1111;
       cs_r_n[1:0] <= 2'b11;
