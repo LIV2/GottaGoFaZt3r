@@ -25,6 +25,7 @@ module Autoconfig (
     output reg CFGOUT_n,
     output ram_cycle,
     output autoconfig_cycle,
+    output reg dtack,
     output reg configured,
     output reg [3:0] DOUT
 );
@@ -63,6 +64,7 @@ begin
     case (z3_state)
       Z3_IDLE:
         begin
+          dtack <= 0;
           if (!FCS_n && autoconfig_cycle)
             z3_state <= Z3_START;
           else
@@ -78,7 +80,11 @@ begin
             z3_state <= Z3_START;
           end
         end
-      Z3_DATA:  z3_state <= Z3_END;
+      Z3_DATA:
+        begin
+          z3_state <= Z3_END;
+          dtack <= 1;
+        end
       Z3_END:
         begin
           if (FCS_n)

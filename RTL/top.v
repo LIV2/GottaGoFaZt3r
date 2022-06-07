@@ -120,6 +120,7 @@ Autoconfig AUTOCONFIG (
   .CFGOUT_n (autoconfig_cfgout),
   .ram_cycle (ram_cycle),
   .autoconfig_cycle (autoconfig_cycle),
+  .dtack (autoconfig_dtack),
   .configured (configured),
   .DOUT (autoconfig_dout),
   .SENSEZ3 (SENSEZ3)
@@ -155,7 +156,7 @@ assign BUFDIR = READ;
 assign CFGOUT_n = (SENSEZ3) ? autoconfig_cfgout : CFGIN_n;
 
 assign SLAVE_n = !(!FCS_n && (autoconfig_cycle || ram_cycle));
-assign DTACK_n = (!SLAVE_n) ? !(ram_dtack || autoconfig_cycle) : 1'bZ;
+assign DTACK_n = (!SLAVE_n) ? !(ram_dtack || autoconfig_dtack) : 1'bZ;
 
 assign MTACK_n = 1'bZ;
 
