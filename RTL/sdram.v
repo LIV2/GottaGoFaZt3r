@@ -237,7 +237,7 @@ begin
           // Wait for tRCD and also wait until we see data strobes before committing writes
           access_cycle_wait: begin
             `cmd(cmd_nop)
-            if (DS_n[3:0] != 4'b1111 && DOE || RW)
+            if (DS_n[3:0] != 4'b1111 && DOE)
               ram_state <= access_cycle_rw;
             else
               ram_state <= access_cycle_wait; // No data strobes seen yet, hold off
@@ -250,7 +250,7 @@ begin
           // This allows for the board to be assembled with 128MB or 256MB without needing separate firmware.
           access_cycle_rw: begin
             dtack <= 1;
-            maddr_r[12:0] <= {3'b000,ADDR[27], ADDR[10:2]};
+            maddr_r[12:0] <= {3'b001,ADDR[27], ADDR[10:2]};
             if (!RW) begin
               `cmd(cmd_write)
               DQM_n[3:0] <= DS_n[3:0];
@@ -267,7 +267,6 @@ begin
           // Take CKE low until the end of the Zorro cycle in order to hold the read output
           // For write cycles, just keep NOP'ing
           access_cycle_hold: begin
-            dtack <= 0;
             `cmd(cmd_nop)
             if (!FCS_n && DS_n[3:0] != 4'b1111) begin
               if (RW)
@@ -275,20 +274,13 @@ begin
               ram_state <= access_cycle_hold;
             end else begin
               CKE <= 1;
-              if (!FCS_n)
-                // If Data strobes went inactive before FCS_n then it must be a burst
-                // Go do the next burst cycle
-                ram_state <= access_cycle_wait;
-              else
-                // Otherwise precharge and return to idle state
-                ram_state <= access_cycle_precharge;
+              ram_state <= access_cycle_precharge;
             end
           end
 
-          // Precharge all banks
+          // Wait for auto-precharge to complete
           access_cycle_precharge: begin
-            `cmd(cmd_precharge)
-            maddr_r[10] <= 1'b1;
+            `cmd(cmd_nop)
             ram_state <= ram_cycle_idle;
           end
 
@@ -317,16 +309,15 @@ begin
   end
 end
 
-reg [3:0] dtack_delayed;
+reg [2:0] dtack_delayed;
 always @(posedge CLK or negedge RESET_n) begin
   if (!RESET_n)
-    dtack_delayed[3:0] <= 4'b0;
+    dtack_delayed[2:0] <= 3'b0;
   else
-    dtack_delayed[3:0] <= {dtack_delayed[2:0], dtack};
+    dtack_delayed[2:0] <= {dtack_delayed[1:0], dtack};
 end
 
-// Really bad hack to pulse dtack for 3xClock period during bursts... will be removed
-assign DTACK_EN = dtack_delayed[1] || dtack_delayed[2] || dtack_delayed[3];
+assign DTACK_EN = dtack_delayed[CAS_LATENCY-1];
 
 endmodule
 

@@ -148,25 +148,6 @@ SDRAM SDRAM (
   .configured (configured)
 );
 
-// Latch DTACK on strobe from SDRAM unit
-// Clear on cycle end
-FDCP FDCP_inst (
-  .CLR (FCS_n),
-  .PRE (1'b0),
-  .D (1'b1),
-  .C (ram_dtack),
-  .Q (dtack_latch)
-);
-
-reg bursting;
-
-always @(negedge MTCR_n or posedge FCS_n) begin
-  if (FCS_n)
-    bursting <= 1'b0;
-  else
-    bursting <= 1'b1;
-end
-
 assign AD[31:28] = (autoconfig_cycle && BERR_n && DOE && READ) ? autoconfig_dout[3:0] : 4'bZ;
 
 assign BUFOE_n = !ram_cycle || !DOE || !BERR_n;
@@ -174,10 +155,9 @@ assign BUFDIR = READ;
 assign CFGOUT_n = (SENSEZ3) ? autoconfig_cfgout : CFGIN_n;
 
 assign SLAVE_n = !(!FCS_n && (autoconfig_cycle || ram_cycle));
-// Not the final equation, just testing different ideas to get bursts working well
-assign DTACK_n = (!SLAVE_n) ? !(dtack_latch && !bursting || ram_dtack || autoconfig_cycle) : 1'bZ;
+assign DTACK_n = (!SLAVE_n) ? !(ram_dtack || autoconfig_cycle) : 1'bZ;
 
-assign MTACK_n = (!SLAVE_n && ram_cycle) ? 1'b0 : 1'bZ;
+assign MTACK_n = 1'bZ;
 
 endmodule
 
