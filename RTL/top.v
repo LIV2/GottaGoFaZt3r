@@ -150,7 +150,7 @@ SDRAM SDRAM (
 
 assign AD[31:28] = (autoconfig_cycle && BERR_n && DOE && READ && !DS_n[3]) ? autoconfig_dout[3:0] : 4'bZ;
 
-assign BUFOE_n = !ram_cycle || !DOE || !BERR_n;
+assign BUFOE_n = !ram_cycle || FCS_n || !DOE || !BERR_n;
 assign BUFDIR = READ;
 assign CFGOUT_n = (SENSEZ3) ? autoconfig_cfgout : CFGIN_n;
 
