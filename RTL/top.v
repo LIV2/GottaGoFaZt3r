@@ -148,7 +148,7 @@ SDRAM SDRAM (
   .configured (configured)
 );
 
-assign AD[31:28] = (autoconfig_cycle && BERR_n && DOE && READ) ? autoconfig_dout[3:0] : 4'bZ;
+assign AD[31:28] = (autoconfig_cycle && BERR_n && DOE && READ && !DS_n[3]) ? autoconfig_dout[3:0] : 4'bZ;
 
 assign BUFOE_n = !ram_cycle || !DOE || !BERR_n;
 assign BUFDIR = READ;

@@ -29,7 +29,6 @@ module Autoconfig (
     output reg [3:0] DOUT
 );
 
-
 `ifndef makedefines
 `define SERIAL 32'd421
 `define PRODID 8'h72
@@ -39,8 +38,8 @@ localparam [15:0] mfg_id  = 16'h07DB;
 localparam [7:0]  prod_id = `PRODID;
 localparam [31:0] serial  = `SERIAL;
 
-reg done = 0;
 reg shutup = 0;
+reg [1:0] z3_state;
 
 wire validspace = FC[1] ^ FC[0]; // 1 when FC indicates user/supervisor data/program space
 
@@ -49,7 +48,48 @@ always @(posedge CLK) begin
   vs[1:0] <= {vs[0],validspace};
 end
 
+localparam  Z3_IDLE  = 2'd0,
+            Z3_START = 2'd1,
+            Z3_DATA  = 2'd2,
+            Z3_END   = 2'd3;
+
 assign autoconfig_cycle = match && !CFGIN_n && CFGOUT_n && vs[1];
+
+always @(posedge CLK or negedge RESET_n)
+begin
+  if (!RESET_n) begin
+    z3_state <= Z3_IDLE;
+  end else begin
+    case (z3_state)
+      Z3_IDLE:
+        begin
+          if (!FCS_n && autoconfig_cycle)
+            z3_state <= Z3_START;
+          else
+            z3_state <= Z3_IDLE;
+        end
+      Z3_START:
+        begin
+          if (FCS_n) begin
+            z3_state <= Z3_IDLE;
+          end else if (!DS_n) begin
+            z3_state <= Z3_DATA;
+          end else begin
+            z3_state <= Z3_START;
+          end
+        end
+      Z3_DATA:  z3_state <= Z3_END;
+      Z3_END:
+        begin
+          if (FCS_n)
+            z3_state <= Z3_IDLE;
+          else
+            z3_state <= Z3_END;
+        end
+    endcase
+  end
+end
+
 // Register Config in/out at end of bus cycle
 always @(posedge FCS_n or negedge RESET_n)
 begin
@@ -67,7 +107,7 @@ begin
     configured      <= 1'b0;
     shutup          <= 1'b0;
     addr_match[3:0] <= 4'b1111;
-  end else if (autoconfig_cycle && !FCS_n) begin
+  end else if (z3_state == Z3_DATA) begin
     if (READ) begin
       case ({ADDRL[5:0],ADDRL[6]})
         7'h00:   DOUT[3:0] <= 4'b1010;        // Type: Zorro III Memory
@@ -93,10 +133,10 @@ begin
         default: DOUT[3:0] <= 4'hF;
       endcase
     end else begin
-      if (ADDRL[5:0] == 6'h13 && !DS_n) begin
+      if (ADDRL[5:0] == 6'h13) begin
         // Shutup
         shutup <= 1;
-      end else if (ADDRL[5:0] == 6'h11 && !DS_n) begin
+      end else if (ADDRL[5:0] == 6'h11) begin
         // Write base address
         addr_match <= DIN[3:0];
         configured <= 1;
