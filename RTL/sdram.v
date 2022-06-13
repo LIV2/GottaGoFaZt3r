@@ -13,15 +13,13 @@ work. If not, see <http://creativecommons.org/licenses/by-sa/4.0/>.
 module SDRAM(
     input [27:2] ADDR,
     input [3:0] DS_n,
-    input DOE,
-    input FCS_n,
     input ram_cycle,
     input RESET_n,
     input RW,
     input CLK,
     input ECLK,
     input configured,
-    input MTCR_n,
+    input [1:0] z3_state,
     output [1:0] BA,
     output [12:0] MADDR,
     output CAS_n,
@@ -30,11 +28,13 @@ module SDRAM(
     output WE_n,
     output reg CKE,
     output reg [3:0] DQM_n,
-    output DTACK_EN
+    output reg dtack
     );
 
-localparam tRP = 1;
-localparam tRCD = 1;
+`include "globalparams.vh"
+
+localparam tRP = 2;
+localparam tRCD = 2;
 localparam tRFC = 4;
 localparam CAS_LATENCY = 3'd2;
 
@@ -178,13 +178,6 @@ always @(posedge CLK or negedge RESET_n) begin
   end
 end
 
-reg [1:0] ram_cycle_sync;
-reg dtack;
-
-always @(posedge CLK) begin
-  ram_cycle_sync[1:0] <= {ram_cycle_sync[0], ram_cycle};
-end
-
 always @(posedge CLK or negedge RESET_n)
 begin
   if (!RESET_n) begin
@@ -215,10 +208,10 @@ begin
           cs_r_n[1:0]  <= 2'b00; // Refresh all modules
           refreshing   <= 1'b1;
         // If refresh_request not active and we're in a ram cycle, go do a ram access
-        end else if (ram_cycle_sync[1] && !FCS_n) begin
+        end else if (ram_cycle && z3_state >= Z3_START) begin
           `cmd(cmd_active)
           cycle_type    <= ram_cycle_access;
-          ram_state     <= access_cycle_wait;
+          ram_state     <= 5'h1;
           maddr_r[12:0] <= ADDR[23:11];
           ba_r[1:0]     <= ADDR[25:24];
           cs_r_n[1:0]   <= {ADDR[26],~ADDR[26]};
@@ -237,7 +230,7 @@ begin
           // Wait for tRCD and also wait until we see data strobes before committing writes
           access_cycle_wait: begin
             `cmd(cmd_nop)
-            if (DS_n[3:0] != 4'b1111 && DOE)
+            if (z3_state == Z3_DATA)
               ram_state <= access_cycle_rw;
             else
               ram_state <= access_cycle_wait; // No data strobes seen yet, hold off
@@ -268,12 +261,13 @@ begin
           // For write cycles, just keep NOP'ing
           access_cycle_hold: begin
             `cmd(cmd_nop)
-            if (!FCS_n && DS_n[3:0] != 4'b1111) begin
+            if (z3_state >= Z3_DATA) begin
               if (RW)
                 CKE <= 0;
               ram_state <= access_cycle_hold;
             end else begin
               CKE <= 1;
+              dtack <= 0;
               ram_state <= access_cycle_precharge;
             end
           end
@@ -308,16 +302,6 @@ begin
     end
   end
 end
-
-reg [2:0] dtack_delayed;
-always @(posedge CLK or negedge RESET_n) begin
-  if (!RESET_n)
-    dtack_delayed[2:0] <= 3'b0;
-  else
-    dtack_delayed[2:0] <= {dtack_delayed[1:0], dtack};
-end
-
-assign DTACK_EN = dtack_delayed[CAS_LATENCY-1];
 
 endmodule
 

@@ -10,25 +10,23 @@ work. If not, see <http://creativecommons.org/licenses/by-sa/4.0/>.
 */
 
 module Autoconfig (
-    input match,
-    output reg [3:0] addr_match,
+    input autoconfig_cycle,
     input [6:0] ADDRL,
     input FCS_n,
     input CLK,
     input READ,
-    input DS_n,
-    input CFGIN_n,
     input [3:0] DIN,
     input RESET_n,
-    input SENSEZ3,
-    input [2:0] FC,
+    input [1:0] z3_state,
+    output reg [3:0] addr_match,
     output reg CFGOUT_n,
-    output ram_cycle,
-    output autoconfig_cycle,
     output reg dtack,
     output reg configured,
+    output reg shutup,
     output reg [3:0] DOUT
 );
+
+`include "globalparams.vh"
 
 `ifndef makedefines
 `define SERIAL 32'd421
@@ -38,63 +36,6 @@ module Autoconfig (
 localparam [15:0] mfg_id  = 16'h07DB;
 localparam [7:0]  prod_id = `PRODID;
 localparam [31:0] serial  = `SERIAL;
-
-reg shutup = 0;
-reg [1:0] z3_state;
-
-wire validspace = FC[1] ^ FC[0]; // 1 when FC indicates user/supervisor data/program space
-
-reg [1:0] vs;
-always @(posedge CLK) begin
-  vs[1:0] <= {vs[0],validspace};
-end
-
-localparam  Z3_IDLE  = 2'd0,
-            Z3_START = 2'd1,
-            Z3_DATA  = 2'd2,
-            Z3_END   = 2'd3;
-
-assign autoconfig_cycle = match && !CFGIN_n && CFGOUT_n && vs[1];
-
-always @(posedge CLK or negedge RESET_n)
-begin
-  if (!RESET_n) begin
-    z3_state <= Z3_IDLE;
-  end else begin
-    case (z3_state)
-      Z3_IDLE:
-        begin
-          dtack <= 0;
-          if (!FCS_n && autoconfig_cycle)
-            z3_state <= Z3_START;
-          else
-            z3_state <= Z3_IDLE;
-        end
-      Z3_START:
-        begin
-          if (FCS_n) begin
-            z3_state <= Z3_IDLE;
-          end else if (!DS_n) begin
-            z3_state <= Z3_DATA;
-          end else begin
-            z3_state <= Z3_START;
-          end
-        end
-      Z3_DATA:
-        begin
-          z3_state <= Z3_END;
-          dtack <= 1;
-        end
-      Z3_END:
-        begin
-          if (FCS_n)
-            z3_state <= Z3_IDLE;
-          else
-            z3_state <= Z3_END;
-        end
-    endcase
-  end
-end
 
 // Register Config in/out at end of bus cycle
 always @(posedge FCS_n or negedge RESET_n)
@@ -111,9 +52,11 @@ begin
   if (!RESET_n) begin
     DOUT[3:0]       <= 4'b0;
     configured      <= 1'b0;
+    dtack           <= 1'b0;
     shutup          <= 1'b0;
     addr_match[3:0] <= 4'b1111;
-  end else if (z3_state == Z3_DATA) begin
+  end else if (z3_state == Z3_DATA && autoconfig_cycle == 1) begin
+    dtack <= 1;
     if (READ) begin
       case ({ADDRL[5:0],ADDRL[6]})
         7'h00:   DOUT[3:0] <= 4'b1010;        // Type: Zorro III Memory
@@ -148,8 +91,9 @@ begin
         configured <= 1;
       end
     end
+  end else begin
+    dtack <= 0;
   end
 end
 
-assign ram_cycle = (match && !CFGOUT_n && !shutup && vs[1]);
 endmodule

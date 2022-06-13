@@ -31,8 +31,8 @@ module GottaGoFaZt3r(
         output SLAVE_n,
         output MTACK_n,
         // RAM
-        output BUFDIR,
-        output BUFOE_n,
+        output reg BUFDIR,
+        output reg BUFOE_n,
         output CAS_n,
         output CKE,
         output [1:0] CS_n,
@@ -43,6 +43,8 @@ module GottaGoFaZt3r(
         output RAS_n,
         output WE_n
     );
+
+`include "globalparams.vh"
 
 assign MEMCLK = ~CLK; 
 
@@ -72,9 +74,7 @@ end
 
 // Autoconf
 wire [3:0] autoconfig_dout;
-wire autoconfig_cycle;
 wire autoconfig_cfgout;
-wire configured;
 
 // addr_match comes from the autoconfig unit
 // At reset it is 4'hF to match autoconfig cycles
@@ -88,6 +88,9 @@ wire [3:0] addr_match;
 
 reg [27:8] ADDR;
 reg match;
+wire configured;
+
+wire validspace = FC[1] ^ FC[0]; // 1 when FC indicates user/supervisor data/program space
 
 always @(negedge FCS_n or negedge RST_n)
 begin
@@ -95,6 +98,7 @@ begin
     ADDR  <= 20'b0;
     match <= 1'b0;
   end else begin
+    BUFDIR <= READ;
     ADDR[27:8] <= A[27:8];
     if (AD[31:28] == addr_match) begin
       // Match 8 address bits when unconfigured (8'hFF) but only 4 when configured (256MB Blocks)
@@ -105,32 +109,90 @@ begin
   end
 end
 
+reg [1:0] z3_state;
+reg dtack;
+reg ram_cycle;
+reg autoconfig_cycle;
+wire autoconfig_dtack;
+wire ram_dtack;
+wire shutup;
+
+always @(posedge CLK or negedge RST_n)
+begin
+  if (!RST_n) begin
+    z3_state         <= Z3_IDLE;
+    dtack            <= 1'b0;
+    ram_cycle        <= 1'b0;
+    autoconfig_cycle <= 1'b0;
+  end else begin
+    case (z3_state)
+      Z3_IDLE:
+        begin
+          dtack <= 0;
+          if (!FCS_n_sync[1] && match && validspace) begin
+            z3_state <= Z3_START;
+            autoconfig_cycle <= match && !configured && !shutup;
+            ram_cycle <= match && configured;
+          end else begin
+            autoconfig_cycle <= 0;
+            ram_cycle <= 0;
+            z3_state <= Z3_IDLE;
+          end
+        end
+      Z3_START:
+        begin
+          if (FCS_n_sync[1]) begin
+            z3_state <= Z3_IDLE;
+          end else if ((!DS0_n_sync[1] || !DS1_n_sync[1] || !DS2_n_sync[1] || !DS3_n_sync[1]) && DOE) begin
+            z3_state <= Z3_DATA;
+          end else begin
+            z3_state <= Z3_START;
+          end
+        end
+      Z3_DATA:
+        begin
+          if (FCS_n_sync[1]) begin
+            z3_state <= Z3_IDLE;
+          end else if (autoconfig_dtack && autoconfig_cycle || ram_dtack && ram_cycle) begin
+            z3_state <= Z3_END;
+          end
+        end
+      Z3_END:
+        begin
+          if (FCS_n_sync[1]) begin
+            z3_state <= Z3_IDLE;
+            ram_cycle <= 0;
+            autoconfig_cycle <= 0;
+            dtack <= 0;
+          end else begin
+            z3_state <= Z3_END;
+            dtack <= 1;
+          end
+        end
+    endcase
+  end
+end
+
 Autoconfig AUTOCONFIG (
-  .match (match),
   .addr_match (addr_match),
   .ADDRL ({ADDR[8], A[7:2]}),
   .FCS_n (FCS_n_sync[1]),
   .CLK (CLK),
   .READ (READ),
-  .DS_n (DS3_n_sync[1]),
-  .CFGIN_n (CFGIN_n),
   .DIN (AD[31:28]),
-  .FC (FC[2:0]),
   .RESET_n (RST_n),
   .CFGOUT_n (autoconfig_cfgout),
-  .ram_cycle (ram_cycle),
   .autoconfig_cycle (autoconfig_cycle),
   .dtack (autoconfig_dtack),
   .configured (configured),
   .DOUT (autoconfig_dout),
-  .SENSEZ3 (SENSEZ3)
+  .z3_state (z3_state),
+  .shutup (shutup)
 );
 
 SDRAM SDRAM (
   .ADDR ({ADDR[27:8], A[7:2]}),
   .DS_n ({DS3_n_sync[1], DS2_n_sync[1], DS1_n_sync[1], DS0_n_sync[1]}),
-  .DOE (DOE),
-  .FCS_n (FCS_n_sync[1]),
   .ram_cycle (ram_cycle),
   .RESET_n (RST_n),
   .RW (READ),
@@ -144,20 +206,30 @@ SDRAM SDRAM (
   .WE_n (WE_n),
   .CKE (CKE),
   .DQM_n (DQM_n),
-  .DTACK_EN (ram_dtack),
-  .MTCR_n (MTCR_n),
-  .configured (configured)
+  .dtack (ram_dtack),
+  .configured (configured),
+  .z3_state (z3_state)
 );
 
-assign AD[31:28] = (autoconfig_cycle && BERR_n && DOE && READ && !DS_n[3]) ? autoconfig_dout[3:0] : 4'bZ;
+assign AD[31:28] = (autoconfig_cycle && BERR_n && DOE && READ) ? autoconfig_dout[3:0] : 4'bZ;
 
-assign BUFOE_n = !ram_cycle || FCS_n || !DOE || !BERR_n;
-assign BUFDIR = READ;
+always @(posedge CLK or posedge FCS_n or negedge BERR_n)
+begin
+  if (FCS_n) begin
+    BUFOE_n <= 1;
+  end else if (!BERR_n) begin
+    BUFOE_n <= 1;
+  end else begin
+    if (!FCS_n_sync[1] && ram_cycle && DOE)
+      BUFOE_n <= 0;
+  end
+end
+
 assign CFGOUT_n = (SENSEZ3) ? autoconfig_cfgout : CFGIN_n;
 
-assign SLAVE_n = !(!FCS_n && (autoconfig_cycle || ram_cycle));
-assign DTACK_n = (!SLAVE_n) ? !(ram_dtack || autoconfig_dtack) : 1'bZ;
+assign SLAVE_n = !(!FCS_n && match && validspace);
 
+assign DTACK_n = (!SLAVE_n) ? !dtack : 1'bZ;
 assign MTACK_n = 1'bZ;
 
 endmodule
