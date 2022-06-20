@@ -14,8 +14,9 @@
 7. [License](#license)
 
 ## Status
-This is tested and working in a stock Amiga 3000  
-If you have tested this in in another setup (accelerator etc) please let me know by opening an issue on github!
+Tested and working in the following configurations:
+* Amiga 3000
+* Amiga 4000 with A3640
 
 ## Features
 128MB or 256MB Z3 Fast RAM  
