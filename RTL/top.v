@@ -143,7 +143,7 @@ begin
         begin
           if (FCS_n_sync[1]) begin
             z3_state <= Z3_IDLE;
-          end else if ((!DS0_n_sync[1] || !DS1_n_sync[1] || !DS2_n_sync[1] || !DS3_n_sync[1]) && DOE) begin
+          end else if (READ || (!DS0_n_sync[1] || !DS1_n_sync[1] || !DS2_n_sync[1] || !DS3_n_sync[1]) && DOE) begin
             z3_state <= Z3_DATA;
           end else begin
             z3_state <= Z3_START;

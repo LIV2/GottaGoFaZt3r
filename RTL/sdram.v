@@ -211,7 +211,7 @@ begin
         end else if (ram_cycle && z3_state >= Z3_START) begin
           `cmd(cmd_active)
           cycle_type    <= ram_cycle_access;
-          ram_state     <= 5'h1;
+          ram_state     <= access_cycle_wait;
           maddr_r[12:0] <= ADDR[23:11];
           ba_r[1:0]     <= ADDR[25:24];
           cs_r_n[1:0]   <= {ADDR[26],~ADDR[26]};

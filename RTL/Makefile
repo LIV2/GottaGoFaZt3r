@@ -8,7 +8,7 @@ PRODID=72
 DEFINES=makedefines autoconfig SERIAL=32'h${SERIAL} PRODID=${PRODID}
 CABLE=usb21
 
-CPLDFITFLAGS=-loc on -slew fast -init low -terminate keeper -unused float -power std -optimize speed -keepio
+CPLDFITFLAGS=-loc on -slew slow -init low -terminate keeper -unused float -power std -optimize speed -keepio
 
 .PHONY:	all clean fit
 
