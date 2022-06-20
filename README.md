@@ -46,7 +46,7 @@ Layer sequence:
 |0.1uF Ceramic Capacitor, 0603|C4-15,C17-44|40|[Mouser](https://www.mouser.com/ProductDetail/80-C603C104K5RAC3121)<br />[DigiKey](https://www.digikey.com/short/f7trtfwt)||
 |10uF Ceramic Capacitor, 1206|C2-3,C16|3|[Mouser](https://www.mouser.com/ProductDetail/187-CL31A106MAHNNNE)<br />[DigiKey](https://www.digikey.com/short/rqt1br0q)||
 |33 Ohm Resistor, 0603|R1|1|[Mouser](https://www.mouser.com/ProductDetail/603-RT0603DRE0733RL)<br />[DigiKey](https://www.digikey.com/short/40rdd4m1)||
-|33 Ohm Resistor network, Convex 1206 (3.2x1.6mm)|RN1-8|8|[Mouser](https://www.mouser.com/ProductDetail/667-EXB-38V330JV)<br />[DigiKey](https://www.digikey.com/short/vhtm8v3440rdd4m1)||
+|33 Ohm Resistor network, Convex 1206 (3.2x1.6mm)|RN1-8|8|[Mouser](https://www.mouser.com/ProductDetail/667-EXB-38V330JV)<br />[DigiKey](https://www.digikey.com/short/t08zh4pn)||
 |10K Resistor, 0603|R2|1|[Mouser](https://www.mouser.com/ProductDetail/603-RT0603FRD0710KL)<br />[DigiKey](https://www.digikey.com/short/nvvrt5dw)||
 |LM1117-3.3 SOT-223|U1|1|[Mouser](https://www.mouser.com/ProductDetail/926-LM1117IMP3.3NOPB)<br />[Digikey](https://www.digikey.se/short/jprv7r4q)||
 |74LVC245N TSSOP|U2-5|4|[Mouser](https://www.mouser.com/ProductDetail/595-SN74LVC245APWT)<br />[DigiKey](https://www.digikey.com/short/pnq3wff3)|Can be substituted with SN74LVTH245 or SN74LVCR2245|
