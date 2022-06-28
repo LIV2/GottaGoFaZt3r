@@ -76,35 +76,39 @@ end
 wire [3:0] autoconfig_dout;
 wire autoconfig_cfgout;
 
-// addr_match comes from the autoconfig unit
-// At reset it is 4'hF to match autoconfig cycles
-// Autoconfig will then change addr_match to the new base address
-wire [3:0] addr_match;
+wire [3:0] ram_base_addr;
+
+reg [27:8] ADDR;
+reg autoconfig_addr_match;
+reg ram_addr_match;
+
+wire match = autoconfig_addr_match || ram_addr_match;
+wire configured;
+wire validspace = FC[1] ^ FC[0]; // 1 when FC indicates user/supervisor data/program space
+wire shutup;
 
 // Latch address bits 27-8 on FCS_n asserted
 // 
-// Also latch whether there's a match (rather than latching Address 31-28) 
-// Doing things this way saves a bunch of space in the CPLD
-
-reg [27:8] ADDR;
-reg match;
-wire configured;
-
-wire validspace = FC[1] ^ FC[0]; // 1 when FC indicates user/supervisor data/program space
-
 always @(negedge FCS_n or negedge RST_n)
 begin
   if (!RST_n) begin
-    ADDR  <= 20'b0;
-    match <= 1'b0;
+    ADDR                  <= 20'b0;
+    ram_addr_match        <= 0;
+    autoconfig_addr_match <= 0;
   end else begin
     BUFDIR <= READ;
     ADDR[27:8] <= A[27:8];
-    if (AD[31:28] == addr_match) begin
-      // Match 8 address bits when unconfigured (8'hFF) but only 4 when configured (256MB Blocks)
-      match <= (configured || A[27:24] == 4'hF);
+
+    if (AD[31:28] == ram_base_addr && configured) begin
+      ram_addr_match <= 1;
     end else begin
-      match <= 1'b0;
+      ram_addr_match <= 0;
+    end
+
+    if ({AD[31:28],A[27:24]} == 8'hFF && !configured && !shutup && !CFGIN_n) begin
+      autoconfig_addr_match <= 1;
+    end else begin
+      autoconfig_addr_match <= 0;
     end
   end
 end
@@ -115,7 +119,6 @@ reg ram_cycle;
 reg autoconfig_cycle;
 wire autoconfig_dtack;
 wire ram_dtack;
-wire shutup;
 
 always @(posedge CLK or negedge RST_n)
 begin
@@ -130,13 +133,13 @@ begin
         begin
           dtack <= 0;
           if (!FCS_n_sync[1] && match && validspace) begin
-            z3_state <= Z3_START;
-            autoconfig_cycle <= match && !configured && !shutup;
-            ram_cycle <= match && configured;
+            z3_state         <= Z3_START;
+            autoconfig_cycle <= autoconfig_addr_match;
+            ram_cycle        <= ram_addr_match;
           end else begin
             autoconfig_cycle <= 0;
-            ram_cycle <= 0;
-            z3_state <= Z3_IDLE;
+            ram_cycle        <= 0;
+            z3_state         <= Z3_IDLE;
           end
         end
       Z3_START:
@@ -174,7 +177,7 @@ begin
 end
 
 Autoconfig AUTOCONFIG (
-  .addr_match (addr_match),
+  .ram_base_addr (ram_base_addr),
   .ADDRL ({ADDR[8], A[7:2]}),
   .FCS_n (FCS_n_sync[1]),
   .CLK (CLK),
@@ -211,7 +214,7 @@ SDRAM SDRAM (
   .z3_state (z3_state)
 );
 
-assign AD[31:28] = (autoconfig_cycle && BERR_n && DOE && READ) ? autoconfig_dout[3:0] : 4'bZ;
+assign AD[31:28] = (!FCS_n && autoconfig_cycle && BERR_n && DOE && READ) ? autoconfig_dout[3:0] : 4'bZ;
 
 always @(posedge CLK or posedge FCS_n or negedge BERR_n)
 begin

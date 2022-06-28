@@ -18,7 +18,7 @@ module Autoconfig (
     input [3:0] DIN,
     input RESET_n,
     input [1:0] z3_state,
-    output reg [3:0] addr_match,
+    output reg [3:0] ram_base_addr,
     output reg CFGOUT_n,
     output reg dtack,
     output reg configured,
@@ -50,11 +50,11 @@ end
 always @(posedge CLK or negedge RESET_n)
 begin
   if (!RESET_n) begin
-    DOUT[3:0]       <= 4'b0;
-    configured      <= 1'b0;
-    dtack           <= 1'b0;
-    shutup          <= 1'b0;
-    addr_match[3:0] <= 4'b1111;
+    DOUT[3:0]          <= 4'b0;
+    configured         <= 1'b0;
+    dtack              <= 1'b0;
+    shutup             <= 1'b0;
+    ram_base_addr[3:0] <= 4'b0000;
   end else if (z3_state == Z3_DATA && autoconfig_cycle == 1) begin
     dtack <= 1;
     if (READ) begin
@@ -87,7 +87,7 @@ begin
         shutup <= 1;
       end else if (ADDRL[5:0] == 6'h11) begin
         // Write base address
-        addr_match <= DIN[3:0];
+        ram_base_addr <= DIN[3:0];
         configured <= 1;
       end
     end
