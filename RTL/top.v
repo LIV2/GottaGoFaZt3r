@@ -157,6 +157,7 @@ begin
           if (FCS_n_sync[1]) begin
             z3_state <= Z3_IDLE;
           end else if (autoconfig_dtack && autoconfig_cycle || ram_dtack && ram_cycle) begin
+            dtack <= 1;
             z3_state <= Z3_END;
           end
         end
@@ -169,7 +170,6 @@ begin
             dtack <= 0;
           end else begin
             z3_state <= Z3_END;
-            dtack <= 1;
           end
         end
     endcase

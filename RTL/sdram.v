@@ -230,10 +230,12 @@ begin
           // Wait for tRCD and also wait until we see data strobes before committing writes
           access_cycle_wait: begin
             `cmd(cmd_nop)
-            if (z3_state == Z3_DATA)
+            if (z3_state == Z3_DATA) begin
+              dtack <= 1;
               ram_state <= access_cycle_rw;
-            else
+            end else begin
               ram_state <= access_cycle_wait; // No data strobes seen yet, hold off
+            end
           end
 
           // Read/Write
@@ -242,7 +244,6 @@ begin
           // Kickstart will detect the mirror and add 128MB to the free pool rather than 256MB
           // This allows for the board to be assembled with 128MB or 256MB without needing separate firmware.
           access_cycle_rw: begin
-            dtack <= 1;
             maddr_r[12:0] <= {3'b001,ADDR[27], ADDR[10:2]};
             if (!RW) begin
               `cmd(cmd_write)
