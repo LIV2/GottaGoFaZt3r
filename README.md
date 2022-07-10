@@ -49,7 +49,7 @@ Layer sequence:
 |33 Ohm Resistor network, Convex 1206 (3.2x1.6mm)|RN1-8|8|[Mouser](https://www.mouser.com/ProductDetail/667-EXB-38V330JV)<br />[DigiKey](https://www.digikey.com/short/t08zh4pn)||
 |10K Resistor, 0603|R2|1|[Mouser](https://www.mouser.com/ProductDetail/603-RT0603FRD0710KL)<br />[DigiKey](https://www.digikey.com/short/nvvrt5dw)||
 |LM1117-3.3 SOT-223|U1|1|[Mouser](https://www.mouser.com/ProductDetail/926-LM1117IMP3.3NOPB)<br />[Digikey](https://www.digikey.se/short/jprv7r4q)||
-|74LVC245N TSSOP|U2-5|4|[Mouser](https://www.mouser.com/ProductDetail/595-SN74LVC245APWT)<br />[DigiKey](https://www.digikey.com/short/pnq3wff3)|Can be substituted with SN74LVTH245 or SN74LVCR2245|
+|74LVC245N TSSOP|U2-5|4|[Mouser](https://www.mouser.com/ProductDetail/595-SN74LVC245APWT)<br />[DigiKey](https://www.digikey.se/short/vbmphn44)|Can be substituted with SN74LVTH245 or SN74LVCR2245|
 |AS4C32M16SC 32Mx16 SDRAM, TSSOP-54|U7-10|4|[Mouser](https://www.mouser.com/ProductDetail/913-AS4C32M16SC-7TIN)<br />[DigiKey](https://www.digikey.com/short/wfwn8nmw)|Cheaper option is to use [A3V56S40GTP](https://www.mouser.com/ProductDetail/155-A3V56S40GTP-60) for a 128MB configuration at a drastically lower price, or scavenge some 32Mx16 SDRAM from old SODIMMs*|
 |Xilinx XC95144XL-10TQG100C 10ns 144 Macrocell CPLD|U6|1|[Mouser](https://www.mouser.com/ProductDetail/217-95144XL-10TQ100C)<br />[Digkey](https://www.digikey.com/short/w0r0j288)||
 |Clock Oscillator, HCMOS, 7x5mm, 3.3V, ~66MHz|X1|1|[Mouser](https://www.mouser.com/ProductDetail/959-SM7745HEV-66.667)<br />[DigiKey](https://www.digikey.com/short/q8bzfwj4)|Anything close to 66MHz should work<br />Tested at 66.6666MHz|
@@ -81,7 +81,7 @@ Kickstart will notice this wrap and add only 128MB to the free pool in this inst
 * SparxUK also for being a helpful beta tester of many of my boards
 * [CDH](https://github.com/cdhooper) and [Stefan Reinauer](https://github.com/reinauer) for helping me to get my A3000 going 
 * [Rob "peepo" Taylor](https://tindie.com/stores/bobsbits/) whose A500++ got me started on my journey of tinkering with Amigas
-* [jbilander](https://github.com/jbilander)
+* [jbilander](https://github.com/jbilander) who came up with the cool name :)
 * RetroFletch
 * [SukkoPera](https://github.com/SukkoPera)
 
