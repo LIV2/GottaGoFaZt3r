@@ -1,4 +1,4 @@
-# GottaGoFastRAMZ3 Fast RAM
+# GottaGoFaZt3r Fast RAM
 
 256MB Autoconfig Fast RAM for the Amiga 3000/4000 
 
