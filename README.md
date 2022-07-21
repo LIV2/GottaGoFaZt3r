@@ -20,7 +20,7 @@ Tested and working in the following configurations:
 
 ## Features
 128MB or 256MB Z3 Fast RAM  
-Brand new 64Mx16 SDRAM chips are quite expensive so the board can also be fitted with 32Mx16 chips for a much lower build cost  
+Brand new 32Mx16 SDRAM chips are quite expensive so the board can also be fitted with 16Mx16 chips for a much lower build cost  
 
 ## Ordering PCBs
 I recommend ordering from JLCPCB as this board was designed within their 4-layer specifications  
@@ -50,7 +50,7 @@ Layer sequence:
 |10K Resistor, 0603|R2|1|[Mouser](https://www.mouser.com/ProductDetail/603-RT0603FRD0710KL)<br />[DigiKey](https://www.digikey.com/short/nvvrt5dw)||
 |LM1117-3.3 SOT-223|U1|1|[Mouser](https://www.mouser.com/ProductDetail/926-LM1117IMP3.3NOPB)<br />[Digikey](https://www.digikey.se/short/jprv7r4q)||
 |74LVC245N TSSOP|U2-5|4|[Mouser](https://www.mouser.com/ProductDetail/595-SN74LVC245APWT)<br />[DigiKey](https://www.digikey.se/short/vbmphn44)|Can be substituted with SN74LVTH245 or SN74LVCR2245|
-|AS4C32M16SC 32Mx16 SDRAM, TSSOP-54|U7-10|4|[Mouser](https://www.mouser.com/ProductDetail/913-AS4C32M16SC-7TIN)<br />[DigiKey](https://www.digikey.com/short/wfwn8nmw)|Cheaper option is to use [A3V56S40GTP](https://www.mouser.com/ProductDetail/155-A3V56S40GTP-60) for a 128MB configuration at a drastically lower price, or scavenge some 32Mx16 SDRAM from old SODIMMs*|
+|AS4C32M16SC 32Mx16 SDRAM, TSSOP-54|U7-10|4|[Mouser](https://www.mouser.com/ProductDetail/913-AS4C32M16SC-7TIN)<br />[DigiKey](https://www.digikey.com/short/wfwn8nmw)|Cheaper option is to use [A3V56S40GTP](https://www.mouser.com/ProductDetail/155-A3V56S40GTP-60) 16Mx16 for a 128MB configuration at a drastically lower price, or scavenge some 32Mx16 SDRAM from old SODIMMs*|
 |Xilinx XC95144XL-10TQG100C 10ns 144 Macrocell CPLD|U6|1|[Mouser](https://www.mouser.com/ProductDetail/217-95144XL-10TQ100C)<br />[Digkey](https://www.digikey.com/short/w0r0j288)||
 |Clock Oscillator, HCMOS, 7x5mm, 3.3V, ~66MHz|X1|1|[Mouser](https://www.mouser.com/ProductDetail/959-SM7745HEV-66.667)<br />[DigiKey](https://www.digikey.com/short/q8bzfwj4)|Anything close to 66MHz should work<br />Tested at 66.6666MHz|
 
