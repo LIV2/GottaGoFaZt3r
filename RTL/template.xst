@@ -7,7 +7,7 @@ run
 -ofmt NGC
 -p xc9500xl
 -top GottaGoFaZt3r
--opt_mode Area
+-opt_mode Speed
 -opt_level 2
 -iuc no
 -keep_hierarchy No
@@ -20,7 +20,7 @@ run
 -fsm_extract YES
 -fsm_encoding auto
 -safe_implementation No
--mux_extract NO
+-mux_extract YES
 -resource_sharing YES
 -iobuf YES
 -pld_mp YES
