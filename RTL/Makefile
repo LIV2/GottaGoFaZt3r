@@ -8,11 +8,11 @@ PRODID=72
 DEFINES=makedefines autoconfig SERIAL=32'h${SERIAL} PRODID=${PRODID}
 CABLE=usb21
 
-CPLDFITFLAGS=-loc on -slew slow -init low -terminate keeper -unused float -power std -optimize speed -keepio
+CPLDFITFLAGS=-loc on -slew slow -init low -terminate keeper -unused ground -power std -optimize speed -keepio
 
 .PHONY:	all clean fit
 
-all:	$(PROJECT).jed
+all:	../Binary/$(PROJECT).jed
 
 $(PROJECT).prj: *.v
 	-$(shell rm -f $@)
@@ -31,7 +31,9 @@ $(WORKDIR)/%.vm6:	$(WORKDIR)/%.ngd $(PROJECT).ucf
 
 %.jed:	$(WORKDIR)/%.vm6
 	hprep6 -i $<
-	cp $@ ../Binary/
+
+../Binary/%.jed:	%.jed
+	cp $< ../Binary/
 
 clean:
 	-rm -rvf tmp
@@ -45,7 +47,7 @@ $(WORKDIR)/%.tim:	$(WORKDIR)/%.vm6
 
 timing:	$(WORKDIR)/$(PROJECT).tim
 
-flash:	$(PROJECT).jed
+flash:	../Binary/$(PROJECT).jed
 	@echo "setMode -bs\n"\
 	"setCable -p $(CABLE)\n"\
 	"identify\n"\
