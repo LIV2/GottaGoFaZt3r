@@ -20,12 +20,12 @@ module SDRAM(
     input ECLK,
     input configured,
     input [1:0] z3_state,
-    output [1:0] BA,
-    output [12:0] MADDR,
-    output CAS_n,
-    output RAS_n,
-    output [1:0] CS_n,
-    output WE_n,
+    output reg [1:0] BA,
+    output reg [12:0] MADDR,
+    output reg CAS_n,
+    output reg RAS_n,
+    output reg [1:0] CS_n,
+    output reg WE_n,
     output reg CKE,
     output reg [3:0] DQM_n,
     output reg dtack
@@ -33,16 +33,13 @@ module SDRAM(
 
 `include "globalparams.vh"
 
+`define cmd(ARG) \
+{RAS_n, CAS_n, WE_n} <= ARG;
+
 localparam tRP = 2;
 localparam tRCD = 2;
 localparam tRFC = 4;
 localparam CAS_LATENCY = 3'd2;
-
-`define initcmd(ARG) \
-{ras_i_n, cas_i_n, we_i_n} <= ARG;
-
-`define cmd(ARG) \
-{ras_r_n, cas_r_n, we_r_n} <= ARG;
 
 // RAS CAS WE
 localparam cmd_nop             = 3'b111,
@@ -54,6 +51,7 @@ localparam cmd_nop             = 3'b111,
            cmd_auto_refresh    = 3'b001,
            cmd_load_mode_reg   = 3'b000;
 
+
 localparam mode_register = {
   3'b0,        // M10-12 - Reserved
   1'b1,        // M9     - No burst mode, Single access
@@ -63,103 +61,14 @@ localparam mode_register = {
   3'b0         // M2-0   - Burst length
 };
 
-reg [1:0] cs_i_n;
-reg ras_i_n;
-reg cas_i_n;
-reg we_i_n;
-reg [1:0] cs_r_n;
-reg ras_r_n;
-reg cas_r_n;
-reg we_r_n;
-
-reg [12:0] maddr_i;
-reg [12:0] maddr_r;
-reg [1:0] ba_r;
-
-reg init_done;
-reg [6:0] init_state;
 
 reg [3:0] refresh_timer;
 reg [1:0] refresh_request;
 reg refreshing;
 
-assign MADDR = (init_done) ? maddr_r : maddr_i;
-assign BA     = ba_r;
-assign CS_n   = (init_done) ? cs_r_n : cs_i_n;
-assign RAS_n  = (init_done) ? ras_r_n : ras_i_n;
-assign CAS_n  = (init_done) ? cas_r_n : cas_i_n;
-assign WE_n   = (init_done) ? we_r_n : we_i_n;
-
-localparam init_cycle_precharge1 = 0,
-           init_cycle_refresh1   = init_cycle_precharge1 + tRP,
-           init_cycle_precharge2 = init_cycle_refresh1 + tRFC,
-           init_cycle_refresh2   = init_cycle_precharge2 + tRP,
-           init_cycle_load       = init_cycle_refresh2 + tRFC,
-           init_cycle_done       = init_cycle_load + 1;
-
-always @(negedge CLK or negedge RESET_n) begin
-  if (!RESET_n) begin
-    init_state  <= init_cycle_precharge1;
-    init_done   <= 0;
-    maddr_i     <= 13'b0;
-    cs_i_n[1:0] <= 2'b00;
-  end else begin
-     // Ram Initialization //
-      if (!init_done && configured) begin
-        init_state <= init_state + 1;
-        case (init_state)
-          // Precharge
-          init_cycle_precharge1, init_cycle_precharge2:
-            begin
-              `initcmd(cmd_precharge)
-             maddr_i[11:0] <= {2'b01,10'b0};
-            end
-          // Autorefresh
-          init_cycle_refresh1, init_cycle_refresh2:
-            begin
-              `initcmd(cmd_auto_refresh)
-            end
-          // Load Mode Register
-          init_cycle_load:
-            begin
-              `initcmd(cmd_load_mode_reg)
-              maddr_i[12:0] <= mode_register;
-            end
-           // Init done, ram idle
-           init_cycle_done:
-             begin
-              init_done <= 1;
-            end  
-          default:
-            begin
-              `initcmd(cmd_nop)
-              cs_i_n[1:0] <= 2'b00;
-            end
-        endcase
-      end
-      // End RAM Initialization //
-    end
-end
-
-
-
-reg [4:0] ram_state = 0;
-reg cycle_type = 0;
-
-localparam ram_cycle_access  = 1'b1;
-localparam ram_cycle_refresh = 1'b0;
-
-localparam ram_cycle_idle         = 5'b00000,
-           access_cycle_wait      = ram_cycle_idle+tRCD,
-           access_cycle_rw        = access_cycle_wait+1,
-           access_cycle_hold      = access_cycle_rw+1,
-           access_cycle_precharge = access_cycle_hold+1,
-           refresh_cycle_pre      = 5'b00000,
-           refresh_cycle_auto     = refresh_cycle_pre+1,
-           refresh_cycle_end      = refresh_cycle_auto+tRFC;
-
 wire refreshreset = !refreshing & RESET_n;
 
+// Refresh roughly every 7.1uS / 8192 refreshes in 58ms
 always @(posedge ECLK or negedge refreshreset) begin
   if (!refreshreset) begin
     refresh_timer <= 4'h4;
@@ -178,130 +87,211 @@ always @(posedge CLK or negedge RESET_n) begin
   end
 end
 
-always @(posedge CLK or negedge RESET_n)
-begin
+localparam init_poweron        = 4'b0000,
+           init_precharge      = init_poweron + 1,
+           init_precharge_wait = init_precharge + 1,
+           init_load_mode      = init_precharge_wait + 1,
+           start_refresh       = init_load_mode + 1,
+           refresh_wait        = start_refresh + 1,
+           idle                = refresh_wait + 1,
+           active              = idle + 1,
+           active_wait         = active + 1,
+           data_read           = active_wait + 1,
+           data_write          = data_read + 1,
+           data_hold           = data_write + 1,
+           precharge_wait      = data_hold + 1;
+
+(* fsm_encoding = "compact" *) reg [3:0] ram_state;
+
+reg init_refreshed;
+reg init_done;
+reg [1:0] timer_tRFC;
+
+always @(posedge CLK or negedge RESET_n) begin
   if (!RESET_n) begin
-    `cmd(cmd_nop)
-    maddr_r[12:0]   <= 13'b0;
-    ba_r[1:0]       <= 2'b0;
-    CKE             <= 1'b0;
-    dtack           <= 1'b0;
-    refreshing      <= 1'b0;
-    DQM_n[3:0]      <= 4'b1111;
-    cs_r_n[1:0]     <= 2'b11;
-    ram_state       <= 1'b0;
+    ram_state      <= init_poweron;
+    init_refreshed <= 0;
+    init_done      <= 0;
+    dtack          <= 0;
+    CS_n           <= 2'b11;
+    CKE            <= 1;
+    DQM_n          <= 4'b1111;
   end else begin
-    if (ram_state == 0) begin
-      CKE         <= 1'b1;
-      dtack       <= 1'b0;
-      DQM_n[3:0]  <= 4'b1111;
-      cs_r_n[1:0] <= 2'b11;
-      refreshing  <= 1'b0;
-      if (init_done) begin
-        // Refresh has the highest priority
-        // If refresh_request active, go do a refresh
-        if (refresh_request[1] == 1) begin
-          `cmd(cmd_precharge)
-          maddr_r[10]  <= 1'b1; // Precharge all banks
-          cycle_type   <= ram_cycle_refresh;
-          ram_state    <= refresh_cycle_auto;
-          cs_r_n[1:0]  <= 2'b00; // Refresh all modules
-          refreshing   <= 1'b1;
-        // If refresh_request not active and we're in a ram cycle, go do a ram access
-        end else if (ram_cycle && z3_state >= Z3_START) begin
-          `cmd(cmd_active)
-          cycle_type    <= ram_cycle_access;
-          ram_state     <= access_cycle_wait;
-          maddr_r[12:0] <= ADDR[23:11];
-          ba_r[1:0]     <= ADDR[25:24];
-          cs_r_n[1:0]   <= {ADDR[26],~ADDR[26]};
-        // No refresh needed at this time and no memory access, idle
-        end else begin
-          cs_r_n[1:0]    <= 2'b11;
+    case (ram_state)
+
+      // Showtime!
+      //
+      init_poweron:
+        begin
           `cmd(cmd_nop)
+          CS_n[1:0] <= 2'b00;
+          ram_state <= init_precharge;
         end
-      end
-    end else begin
-      if (cycle_type == ram_cycle_access) begin
-        case (ram_state)
+      
+      // Init precharge
+      //
+      init_precharge:
+        begin
+          `cmd(cmd_precharge)
+          MADDR[10] <= 1'b1; // Precharge all banks
+          ram_state <= init_precharge_wait;
+        end
+      
+      // Init precharge wait
+      //
+      // Wait for precharge to complete
+      init_precharge_wait:
+        begin
+          `cmd(cmd_nop)
+          ram_state <= start_refresh;
+        end
 
-          // Wait
-          //
-          // Wait for tRCD and also wait until we see data strobes before committing writes
-          access_cycle_wait: begin
-            `cmd(cmd_nop)
-            if (z3_state == Z3_DATA)
-              ram_state <= access_cycle_rw;
-            else
-              ram_state <= access_cycle_wait; // No data strobes seen yet, hold off
+      // Load mode register
+      //
+      init_load_mode:
+        begin
+          `cmd(cmd_load_mode_reg)
+          init_done   <= 1;
+          MADDR[12:0] <= mode_register;
+          ram_state   <= precharge_wait;
+        end
+
+      // Refresh
+      //
+      // Start auto-refresh
+      start_refresh:
+        begin
+          `cmd(cmd_auto_refresh)
+          timer_tRFC <= 2'b11;
+          refreshing <= 1;
+          CS_n       <= 2'b00; // Refresh all chips
+          ram_state  <= refresh_wait;
+        end
+      
+      // Refresh wait
+      //
+      // Wait for refresh to finish
+      // During RAM initialization it will refresh twice then go to load the mode register
+      refresh_wait:
+        begin
+          `cmd(cmd_nop)
+          if (timer_tRFC > 0) begin
+            timer_tRFC <= timer_tRFC - 1;
+            ram_state  <= refresh_wait;
+          end else begin
+            if (!init_done) begin
+              if (init_refreshed) begin
+                // If we just finished the second init refresh go load the mode register
+                ram_state      <= init_load_mode;
+              end else begin
+                // Do a second init refresh
+                ram_state      <= start_refresh;
+                init_refreshed <= 1;
+              end
+            end else begin
+              ram_state <= idle;
+            end
           end
+        end
 
-          // Read/Write
-          //
+      // Idle
+      //
+      // Refresh has priority over memory access
+      idle:
+        begin
+          `cmd(cmd_nop)
+          refreshing <= 0;
+          DQM_n <= 4'b1111;
+          CS_n  <= 2'b11;
+          if (refresh_request[1]) begin
+            ram_state <= start_refresh;
+          end else if (ram_cycle && (z3_state == Z3_START || z3_state == Z3_DATA)) begin
+            ram_state <= active;
+          end else begin
+            ram_state <= idle;
+          end
+        end
+
+      // Active
+      //
+      // Activate the row/bank
+      active:
+        begin
+          `cmd(cmd_active)
+          if (RW)
+            dtack <= 1; // For Reads we can get DTACK out early giving a little speed boost
+          ram_state   <= active_wait;
+          MADDR[12:0] <= ADDR[23:11];
+          BA[1:0]     <= ADDR[25:24];
+          CS_n[1:0]   <= {ADDR[26],~ADDR[26]};
+        end
+
+      // Wait
+      //
+      // Wait for tRCD and also wait until we see data strobes before committing writes
+      active_wait:
+        begin
+          `cmd(cmd_nop)
+          if (z3_state == Z3_DATA) begin
+            dtack <= 1;
+            if (RW)
+              ram_state <= data_read;
+            else
+              ram_state <= data_write;
+          end else begin
+            ram_state <= active_wait;
+          end
+        end
+
+      // Read
+      //
+      data_read:
+        begin
+          `cmd(cmd_read)
           // Uses A27 as MA9 so that memory is mirrored above 128MB when using 4x32MB chips
           // Kickstart will detect the mirror and add 128MB to the free pool rather than 256MB
           // This allows for the board to be assembled with 128MB or 256MB without needing separate firmware.
-          access_cycle_rw: begin
-            dtack <= 1;
-            maddr_r[12:0] <= {3'b001,ADDR[27], ADDR[10:2]};
-            if (!RW) begin
-              `cmd(cmd_write)
-              DQM_n[3:0] <= DS_n[3:0];
-            end else begin
-              `cmd(cmd_read)
-              // Reads must return a full long regardless of DS (Zorro III Bus Specifications pg 3-3)
-              DQM_n[3:0] <= 4'b0000;
-            end
-            ram_state <= access_cycle_hold;
+          MADDR[12:0] <= {3'b001,ADDR[27], ADDR[10:2]};
+          // Reads must return a full long regardless of DS (Zorro III Bus Specifications pg 3-3)
+          DQM_n[3:0]  <= 4'b0000;
+          ram_state   <= data_hold;
+        end
+
+      // Write
+      //
+      // Commit the write then go back to idle state
+      data_write:
+        begin
+          `cmd(cmd_write)
+          MADDR[12:0] <= {3'b001,ADDR[27], ADDR[10:2]};
+          DQM_n[3:0]  <= DS_n[3:0];
+          ram_state   <= precharge_wait;
+        end
+
+      // Hold
+      //
+      // On read cycles, take CKE low until the end of the Zorro cycle in order to hold the output
+      data_hold:
+        begin
+          `cmd(cmd_nop)
+          if (z3_state != Z3_IDLE) begin
+             CKE      <= 0;
+            ram_state <= data_hold;
+          end else begin
+            CKE       <= 1;
+            ram_state <= precharge_wait;
           end
+        end
 
-          // Hold
-          //
-          // Take CKE low until the end of the Zorro cycle in order to hold the read output
-          // For write cycles, just keep NOP'ing
-          access_cycle_hold: begin
-            `cmd(cmd_nop)
-            if (z3_state >= Z3_DATA) begin
-              if (RW)
-                CKE <= 0;
-              ram_state <= access_cycle_hold;
-            end else begin
-              CKE <= 1;
-              dtack <= 0;
-              ram_state <= access_cycle_precharge;
-            end
-          end
-
-          // Wait for auto-precharge to complete
-          access_cycle_precharge: begin
-            `cmd(cmd_nop)
-            ram_state <= ram_cycle_idle;
-          end
-
-          default: begin
-            // We should never get here...
-            `cmd(cmd_nop)
-            ram_state <= ram_state+1;
-          end
-
-        endcase
-      end else begin
-        ram_state <= ram_state + 1;
-        case (ram_state)
-          refresh_cycle_auto:
-            `cmd(cmd_auto_refresh)
-
-          refresh_cycle_end: begin
-            ram_state <= ram_cycle_idle;
-          end
-
-          default:
-            `cmd(cmd_nop)
-        endcase
-      end
-    end
+      // Wait for auto-precharge to complete
+      precharge_wait:
+        begin
+          `cmd(cmd_nop)
+          dtack     <= 0;
+          ram_state <= idle;
+        end
+    endcase
   end
 end
-
 endmodule
 

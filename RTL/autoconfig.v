@@ -88,7 +88,7 @@ begin
       end else if (ADDRL[5:0] == 6'h11) begin
         // Write base address
         ram_base_addr <= DIN[3:0];
-        configured <= 1;
+        configured    <= 1;
       end
     end
   end else begin
