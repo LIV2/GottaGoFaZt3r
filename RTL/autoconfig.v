@@ -29,12 +29,11 @@ module Autoconfig (
 `include "globalparams.vh"
 
 `ifndef makedefines
-`define SERIAL 32'd421
-`define PRODID 8'h72
+`define SERIAL 32'd0
 `endif
 
-localparam [15:0] mfg_id  = 16'h07DB;
-localparam [7:0]  prod_id = `PRODID;
+localparam [15:0] mfg_id  = 16'd5194; // Open Amiga hardware registry ID https://github.com/oahr/oahr
+localparam [7:0]  prod_id = 8'h03;
 localparam [31:0] serial  = `SERIAL;
 
 // Register Config in/out at end of bus cycle

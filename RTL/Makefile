@@ -1,11 +1,9 @@
 PROJECT=GottaGoFaZt3r
 PART=XC95144XL-10-TQ100
 WORKDIR=tmp
-#SERIAL=$(shell git rev-parse --short=8 HEAD)
-# Serial numbers currently causing issues with boards.library
+SERIAL=$(shell git rev-parse --short=8 HEAD)
 SERIAL=0
-PRODID=72
-DEFINES=makedefines autoconfig SERIAL=32'h${SERIAL} PRODID=${PRODID}
+DEFINES=makedefines autoconfig SERIAL=32'h${SERIAL}
 CABLE=usb21
 
 CPLDFITFLAGS=-loc on -slew slow -init low -terminate keeper -unused ground -power std -optimize speed -keepio
