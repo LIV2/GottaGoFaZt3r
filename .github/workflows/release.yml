@@ -1,0 +1,58 @@
+name: Generate release files
+
+permissions:
+  contents: write
+on:
+  push:
+    tags:
+      - "Release_**"
+      - "Rev**"
+      - "Proto**"
+      - "proto**"
+  workflow_dispatch:
+
+jobs:
+  kicad_outputs:
+    runs-on: ubuntu-latest
+    container: setsoft/kicad_auto:ki6.0.7_Debian
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+      - name: Generate outputs
+        run: kibot -c kibot/release.kibot.yaml
+        working-directory: Kicad
+      - uses: actions/upload-artifact@master
+        with:
+          name: Gerbers
+          path: Gerbers/*
+      - uses: actions/upload-artifact@master
+        with:
+          name: kicad
+          path: |
+            Docs/*.pdf
+            Docs/*.html
+            Docs/*.png
+            Gerbers/*.csv
+
+  draft_release:
+    runs-on: ubuntu-latest
+    needs:
+      - kicad_outputs
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+      - name: Zip Gerbers
+        run: zip -r Gerbers.zip Gerbers
+        working-directory: artifacts
+      - name: release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          files: |
+            Binary/*.jed
+            artifacts/Gerbers.zip
+            artifacts/kicad/**/*
