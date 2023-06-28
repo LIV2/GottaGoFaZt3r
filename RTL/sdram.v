@@ -218,8 +218,6 @@ always @(posedge CLK or negedge RESET_n) begin
       active:
         begin
           `cmd(cmd_active)
-          if (RW)
-            dtack <= 1; // For Reads we can get DTACK out early giving a little speed boost
           ram_state   <= active_wait;
           MADDR[12:0] <= ADDR[23:11];
           BA[1:0]     <= ADDR[25:24];
