@@ -70,10 +70,10 @@ Kickstart will notice this wrap and add only 128MB to the free pool in this inst
 
 |Address|D0-15|D16-31|
 |-------|-----|------|
-|40000000-43FFFFFF|U7|U9|
-|44000000-47FFFFFF|U8|U10|
-|48000000-4BFFFFFF|U7|U9|
-|4C000000-4FFFFFFF|U8|U10|
+|40000000-43FFFFFF|U9|U7|
+|44000000-47FFFFFF|U10|U8|
+|48000000-4BFFFFFF|U9|U7|
+|4C000000-4FFFFFFF|U10|U8|
 
 ## Special Thanks and Shoutouts
 * [Niklas Ekström](https://github.com/niklasekstrom) for helping to clean up my messy code
