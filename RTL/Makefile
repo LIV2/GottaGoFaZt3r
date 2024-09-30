@@ -45,11 +45,11 @@ $(WORKDIR)/%.tim:	$(WORKDIR)/%.vm6
 
 timing:	$(WORKDIR)/$(PROJECT).tim
 
-flash:	../Binary/$(PROJECT).jed
+flash:
 	@echo "setMode -bs\n"\
 	"setCable -p $(CABLE)\n"\
 	"identify\n"\
-	"assignfile -p 1 -file $<\n"\
+	"assignfile -p 1 -file ../Binary/$(PROJECT).jed\n"\
 	"erase -p 1\n"\
 	"program -p 1\n"\
 	"verify -p 1\n"\

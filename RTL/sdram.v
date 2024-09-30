@@ -231,11 +231,13 @@ always @(posedge CLK or negedge RESET_n) begin
         begin
           `cmd(cmd_nop)
           if (z3_state == Z3_DATA) begin
-            dtack <= 1;
-            if (RW)
+            // dtack <= 1;
+            if (RW) begin
               ram_state <= data_read;
-            else
+            end else begin
+              dtack <= 1;
               ram_state <= data_write;
+            end
           end else begin
             ram_state <= active_wait;
           end
@@ -272,6 +274,7 @@ always @(posedge CLK or negedge RESET_n) begin
       data_hold:
         begin
           `cmd(cmd_nop)
+          dtack <= 1;
           if (z3_state != Z3_IDLE) begin
              CKE      <= 0;
             ram_state <= data_hold;
