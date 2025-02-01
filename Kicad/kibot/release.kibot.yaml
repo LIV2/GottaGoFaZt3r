@@ -2,17 +2,30 @@ kibot:
   version: 1
 
 filters:
+  - name: 'exclude_kibuzzard'
+    type: 'generic'
+    comment: 'Exclude Kibuzzard stuff'
+    exclude_any:
+      - column: References
+        regex: '^kibuzzard.*'
   - name: 'exclude_tht'
     type: 'generic'
     comment: 'Exclude thru-hole parts'
-    exclude_tht: true
+    exclude_any:
+      - column: References
+        regex: '^Zorro.*'
   - name: 'fix_rotation'
     comment: 'Adjust rotation for JLC'
     type: rot_footprint
     rotations:
       - ["^TSOP-II", 270.0]
+      - ["^TSOP-I-32", 270.0]
       - ["^SOT-89", 180.0]
-
+      - ["^SW_DIP_SPSTx04", 270.0]
+      - ["^CP_EIA-3216-18_Kemet-A", 0.0]
+      - ["^SOT-363", 180.0]
+      - ["^IDC-Header", 270.0]
+      - ["^PinHeader", 90.0]
 
 variants:
   - name: rotated
@@ -50,7 +63,7 @@ outputs:
       plot_footprint_values: false
       force_plot_invisible_refs_vals: false
       tent_vias: true
-      use_protel_extensions: false
+      use_protel_extensions: true
       create_gerber_job_file: false
       disable_aperture_macros: true
       gerber_precision: 4.6
@@ -58,7 +71,7 @@ outputs:
       use_gerber_net_attributes: false
       line_width: 0.1
       subtract_mask_from_silk: true
-      inner_extension_pattern: '.gbr'
+      inner_extension_pattern: '.g%Nl'
       use_aux_axis_as_origin: true
 
     layers:
@@ -97,15 +110,14 @@ outputs:
   - name: IBOM
     type: ibom
     comment: "Generate HTML Interactive BOM"
-    dir: ../ibom
+    dir: ../Docs
     options:
-      output: 'ibom.html'
       include_tracks: true
       layer_view: FB
-      blacklist: 'CN1,J1'
       highlight_pin1: true
       include_nets: true
       dark_mode: true
+      extra_fields: "LCSC #,Mouser #"
 
   - name: 3dImage
     type: render_3d
@@ -128,6 +140,7 @@ outputs:
     options:
       output: ../Docs/PCB.png
       format: png
+      show_solderpaste: false
       show_components: none
 
   - name: 'JLCPCB_position'
@@ -140,7 +153,10 @@ outputs:
       units: millimeters
       separate_files_for_front_and_back: false
       use_aux_axis_as_origin: true
-      only_smd: true
+      only_smd: false
+      exclude_filter:
+        - 'exclude_tht'
+        - 'exclude_kibuzzard'
       columns:
         - id: Ref
           name: Designator
@@ -160,9 +176,13 @@ outputs:
     type: bom
     options:
       output: '../Gerbers/%f_%i_jlc.%x'
-      exclude_filter: 'exclude_tht'
+      exclude_filter:
+        - 'exclude_tht'
+        - 'exclude_kibuzzard'
       ref_separator: ','
       columns:
+        - field: 'Quantity Per PCB'
+          name: Qty
         - field: Value
           name: Comment
         - field: References
@@ -174,3 +194,31 @@ outputs:
         hide_pcb_info: true
         hide_stats_info: true
         quote_all: true
+
+  - name: 'html_bom'
+    comment: "BoM"
+    type: bom
+    options:
+      output: '../Docs/%f_%i.%x'
+      exclude_filter: 
+        - 'exclude_kibuzzard'
+      ref_separator: ','
+      columns:
+        - field: 'Quantity Per PCB'
+          name: Qty
+        - field: Value
+          name: Comment
+        - field: References
+          name: Designator
+        - Footprint
+        - field: 'Mouser #'
+          name: 'Mouser Part'
+        - field: 'LCSC #'
+          name: 'LCSC Part'
+      html:
+        title: '%f Bill of materials'
+        hide_pcb_info: true
+        hide_stats_info: true
+        quote_all: true
+        lcsc_link: "LCSC #"
+        mouser_link: "Mouser #"
