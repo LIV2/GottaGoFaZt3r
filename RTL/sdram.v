@@ -67,13 +67,13 @@ localparam mode_register = {
 reg [3:0] refresh_timer;
 reg [1:0] refresh_request;
 reg refreshing;
-reg row_open_valid;
 reg [12:0] open_row;
-reg precharge_to_refresh;
+reg [1:0] precharge_target;
 
 wire refreshreset = !refreshing & RESET_n;
+wire row_open_valid = CS_n[0] ^ CS_n[1];
 wire row_hit = row_open_valid &&
-               (CS_n == {chip_addr, ~chip_addr}) &&
+               (CS_n[1] == chip_addr) &&
                (BA == bank_addr) &&
                (open_row == row_addr);
 
@@ -111,6 +111,10 @@ localparam init_poweron        = 4'b0000,
            precharge           = data_hold + 1,
            precharge_wait      = precharge + 1;
 
+localparam precharge_to_idle    = 2'b00,
+           precharge_to_active  = 2'b01,
+           precharge_to_refresh = 2'b10;
+
 (* fsm_encoding = "compact" *) reg [3:0] ram_state;
 
 reg init_refreshed;
@@ -126,9 +130,8 @@ always @(posedge CLK or negedge RESET_n) begin
     CS_n           <= 2'b11;
     CKE            <= 1;
     DQM_n          <= 4'b1111;
-    row_open_valid <= 0;
     open_row       <= 0;
-    precharge_to_refresh <= 0;
+    precharge_target <= precharge_to_idle;
   end else begin
     case (ram_state)
 
@@ -147,7 +150,6 @@ always @(posedge CLK or negedge RESET_n) begin
         begin
           `cmd(cmd_precharge)
           MADDR[10] <= 1'b1; // Precharge all banks
-          row_open_valid <= 0;
           ram_state <= init_precharge_wait;
         end
       
@@ -165,9 +167,10 @@ always @(posedge CLK or negedge RESET_n) begin
       init_load_mode:
         begin
           `cmd(cmd_load_mode_reg)
-          init_done   <= 1;
-          MADDR[12:0] <= mode_register;
-          ram_state   <= precharge_wait;
+          init_done        <= 1;
+          MADDR[12:0]      <= mode_register;
+          precharge_target <= precharge_to_idle;
+          ram_state        <= precharge_wait;
         end
 
       // Refresh
@@ -179,7 +182,6 @@ always @(posedge CLK or negedge RESET_n) begin
           timer_tRFC <= 2'b11;
           refreshing <= 1;
           CS_n       <= 2'b00; // Refresh all chips
-          row_open_valid <= 0;
           ram_state  <= refresh_wait;
         end
       
@@ -223,7 +225,7 @@ always @(posedge CLK or negedge RESET_n) begin
           if (refresh_request[1]) begin
             if (row_open_valid) begin
               MADDR[10] <= 1'b1;
-              precharge_to_refresh <= 1;
+              precharge_target <= precharge_to_refresh;
               ram_state <= precharge;
             end else begin
               ram_state <= start_refresh;
@@ -240,7 +242,7 @@ always @(posedge CLK or negedge RESET_n) begin
               end
             end else if (row_open_valid) begin
               MADDR[10] <= 1'b1;
-              precharge_to_refresh <= 0;
+              precharge_target <= precharge_to_active;
               ram_state <= precharge;
             end else begin
               ram_state <= active;
@@ -260,7 +262,6 @@ always @(posedge CLK or negedge RESET_n) begin
           MADDR[12:0] <= ADDR[23:11];
           BA[1:0]     <= ADDR[25:24];
           CS_n[1:0]   <= {ADDR[26],~ADDR[26]};
-          row_open_valid <= 1;
           open_row <= ADDR[23:11];
         end
 
@@ -329,7 +330,6 @@ always @(posedge CLK or negedge RESET_n) begin
           `cmd(cmd_precharge)
           CS_n <= 2'b00;
           MADDR[10] <= 1'b1;
-          row_open_valid <= 0;
           ram_state <= precharge_wait;
         end
 
@@ -338,11 +338,14 @@ always @(posedge CLK or negedge RESET_n) begin
         begin
           `cmd(cmd_nop)
           dtack     <= 0;
-          if (precharge_to_refresh) begin
-            ram_state <= start_refresh;
-          end else begin
-            ram_state <= active;
-          end
+          case (precharge_target)
+            precharge_to_active:
+              ram_state <= active;
+            precharge_to_refresh:
+              ram_state <= start_refresh;
+            default:
+              ram_state <= idle;
+          endcase
         end
     endcase
   end
