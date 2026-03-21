@@ -68,13 +68,14 @@ reg [3:0] refresh_timer;
 reg [1:0] refresh_request;
 reg refreshing;
 reg row_open_valid;
-reg open_chip;
-reg [1:0] open_bank;
 reg [12:0] open_row;
-reg [3:0] post_precharge_state;
+reg precharge_to_refresh;
 
 wire refreshreset = !refreshing & RESET_n;
-wire row_hit = row_open_valid && (open_chip == chip_addr) && (open_bank == bank_addr) && (open_row == row_addr);
+wire row_hit = row_open_valid &&
+               (CS_n == {chip_addr, ~chip_addr}) &&
+               (BA == bank_addr) &&
+               (open_row == row_addr);
 
 // Refresh roughly every 7.1uS / 8192 refreshes in 58ms
 always @(posedge ECLK or negedge refreshreset) begin
@@ -126,10 +127,8 @@ always @(posedge CLK or negedge RESET_n) begin
     CKE            <= 1;
     DQM_n          <= 4'b1111;
     row_open_valid <= 0;
-    open_chip      <= 0;
-    open_bank      <= 0;
     open_row       <= 0;
-    post_precharge_state <= idle;
+    precharge_to_refresh <= 0;
   end else begin
     case (ram_state)
 
@@ -224,7 +223,7 @@ always @(posedge CLK or negedge RESET_n) begin
           if (refresh_request[1]) begin
             if (row_open_valid) begin
               MADDR[10] <= 1'b1;
-              post_precharge_state <= start_refresh;
+              precharge_to_refresh <= 1;
               ram_state <= precharge;
             end else begin
               ram_state <= start_refresh;
@@ -241,7 +240,7 @@ always @(posedge CLK or negedge RESET_n) begin
               end
             end else if (row_open_valid) begin
               MADDR[10] <= 1'b1;
-              post_precharge_state <= active;
+              precharge_to_refresh <= 0;
               ram_state <= precharge;
             end else begin
               ram_state <= active;
@@ -262,8 +261,6 @@ always @(posedge CLK or negedge RESET_n) begin
           BA[1:0]     <= ADDR[25:24];
           CS_n[1:0]   <= {ADDR[26],~ADDR[26]};
           row_open_valid <= 1;
-          open_chip <= ADDR[26];
-          open_bank <= ADDR[25:24];
           open_row <= ADDR[23:11];
         end
 
@@ -341,7 +338,11 @@ always @(posedge CLK or negedge RESET_n) begin
         begin
           `cmd(cmd_nop)
           dtack     <= 0;
-          ram_state <= post_precharge_state;
+          if (precharge_to_refresh) begin
+            ram_state <= start_refresh;
+          end else begin
+            ram_state <= active;
+          end
         end
     endcase
   end
