@@ -41,6 +41,10 @@ localparam tRCD = 2;
 localparam tRFC = 4;
 localparam CAS_LATENCY = 3'd2;
 
+wire [12:0] row_addr = ADDR[23:11];
+wire [1:0] bank_addr = ADDR[25:24];
+wire chip_addr = ADDR[26];
+
 // RAS CAS WE
 localparam cmd_nop             = 3'b111,
            cmd_active          = 3'b011,
@@ -51,7 +55,6 @@ localparam cmd_nop             = 3'b111,
            cmd_auto_refresh    = 3'b001,
            cmd_load_mode_reg   = 3'b000;
 
-
 localparam mode_register = {
   3'b0,        // M10-12 - Reserved
   1'b1,        // M9     - No burst mode, Single access
@@ -61,12 +64,18 @@ localparam mode_register = {
   3'b0         // M2-0   - Burst length
 };
 
-
 reg [3:0] refresh_timer;
 reg [1:0] refresh_request;
 reg refreshing;
+reg [12:0] open_row;
+reg [1:0] precharge_target;
 
 wire refreshreset = !refreshing & RESET_n;
+wire row_open_valid = CS_n[0] ^ CS_n[1];
+wire row_hit = row_open_valid &&
+               (CS_n[1] == chip_addr) &&
+               (BA == bank_addr) &&
+               (open_row == row_addr);
 
 // Refresh roughly every 7.1uS / 8192 refreshes in 58ms
 always @(posedge ECLK or negedge refreshreset) begin
@@ -99,7 +108,12 @@ localparam init_poweron        = 4'b0000,
            data_read           = active_wait + 1,
            data_write          = data_read + 1,
            data_hold           = data_write + 1,
-           precharge_wait      = data_hold + 1;
+           precharge           = data_hold + 1,
+           precharge_wait      = precharge + 1;
+
+localparam precharge_to_idle    = 2'b00,
+           precharge_to_active  = 2'b01,
+           precharge_to_refresh = 2'b10;
 
 (* fsm_encoding = "compact" *) reg [3:0] ram_state;
 
@@ -116,6 +130,8 @@ always @(posedge CLK or negedge RESET_n) begin
     CS_n           <= 2'b11;
     CKE            <= 1;
     DQM_n          <= 4'b1111;
+    open_row       <= 0;
+    precharge_target <= precharge_to_idle;
   end else begin
     case (ram_state)
 
@@ -151,9 +167,10 @@ always @(posedge CLK or negedge RESET_n) begin
       init_load_mode:
         begin
           `cmd(cmd_load_mode_reg)
-          init_done   <= 1;
-          MADDR[12:0] <= mode_register;
-          ram_state   <= precharge_wait;
+          init_done        <= 1;
+          MADDR[12:0]      <= mode_register;
+          precharge_target <= precharge_to_idle;
+          ram_state        <= precharge_wait;
         end
 
       // Refresh
@@ -201,12 +218,35 @@ always @(posedge CLK or negedge RESET_n) begin
         begin
           `cmd(cmd_nop)
           refreshing <= 0;
+          dtack <= 0;
           DQM_n <= 4'b1111;
-          CS_n  <= 2'b11;
+          if (!row_open_valid)
+            CS_n  <= 2'b11;
           if (refresh_request[1]) begin
-            ram_state <= start_refresh;
+            if (row_open_valid) begin
+              MADDR[10] <= 1'b1;
+              precharge_target <= precharge_to_refresh;
+              ram_state <= precharge;
+            end else begin
+              ram_state <= start_refresh;
+            end
           end else if (ram_cycle && (z3_state == Z3_START || z3_state == Z3_DATA)) begin
-            ram_state <= active;
+            if (row_hit) begin
+              if (RW) begin
+                ram_state <= data_read;
+              end else if (z3_state == Z3_DATA) begin
+                dtack <= 1;
+                ram_state <= data_write;
+              end else begin
+                ram_state <= idle;
+              end
+            end else if (row_open_valid) begin
+              MADDR[10] <= 1'b1;
+              precharge_target <= precharge_to_active;
+              ram_state <= precharge;
+            end else begin
+              ram_state <= active;
+            end
           end else begin
             ram_state <= idle;
           end
@@ -222,6 +262,7 @@ always @(posedge CLK or negedge RESET_n) begin
           MADDR[12:0] <= ADDR[23:11];
           BA[1:0]     <= ADDR[25:24];
           CS_n[1:0]   <= {ADDR[26],~ADDR[26]};
+          open_row <= ADDR[23:11];
         end
 
       // Wait
@@ -230,14 +271,11 @@ always @(posedge CLK or negedge RESET_n) begin
       active_wait:
         begin
           `cmd(cmd_nop)
-          if (z3_state == Z3_DATA) begin
-            // dtack <= 1;
-            if (RW) begin
-              ram_state <= data_read;
-            end else begin
-              dtack <= 1;
-              ram_state <= data_write;
-            end
+          if (RW) begin
+            ram_state <= data_read;
+          end else if (z3_state == Z3_DATA) begin
+            dtack <= 1;
+            ram_state <= data_write;
           end else begin
             ram_state <= active_wait;
           end
@@ -251,7 +289,8 @@ always @(posedge CLK or negedge RESET_n) begin
           // Uses A27 as MA9 so that memory is mirrored above 128MB when using 4x32MB chips
           // Kickstart will detect the mirror and add 128MB to the free pool rather than 256MB
           // This allows for the board to be assembled with 128MB or 256MB without needing separate firmware.
-          MADDR[12:0] <= {3'b001,ADDR[27], ADDR[10:2]};
+          // A10=0: auto-precharge disabled, row stays open for potential row-hit on next access
+          MADDR[12:0] <= {3'b000,ADDR[27], ADDR[10:2]};
           // Reads must return a full long regardless of DS (Zorro III Bus Specifications pg 3-3)
           DQM_n[3:0]  <= 4'b0000;
           ram_state   <= data_hold;
@@ -263,9 +302,10 @@ always @(posedge CLK or negedge RESET_n) begin
       data_write:
         begin
           `cmd(cmd_write)
-          MADDR[12:0] <= {3'b001,ADDR[27], ADDR[10:2]};
+          // A10=0: auto-precharge disabled, row stays open for potential row-hit on next access
+          MADDR[12:0] <= {3'b000,ADDR[27], ADDR[10:2]};
           DQM_n[3:0]  <= DS_n[3:0];
-          ram_state   <= precharge_wait;
+          ram_state   <= idle;
         end
 
       // Hold
@@ -280,19 +320,34 @@ always @(posedge CLK or negedge RESET_n) begin
             ram_state <= data_hold;
           end else begin
             CKE       <= 1;
-            ram_state <= precharge_wait;
+            ram_state <= idle;
           end
         end
 
-      // Wait for auto-precharge to complete
+      // Precharge the currently open row before refresh or a row miss
+      precharge:
+        begin
+          `cmd(cmd_precharge)
+          CS_n <= 2'b00;
+          MADDR[10] <= 1'b1;
+          ram_state <= precharge_wait;
+        end
+
+      // Wait for precharge to complete
       precharge_wait:
         begin
           `cmd(cmd_nop)
           dtack     <= 0;
-          ram_state <= idle;
+          case (precharge_target)
+            precharge_to_active:
+              ram_state <= active;
+            precharge_to_refresh:
+              ram_state <= start_refresh;
+            default:
+              ram_state <= idle;
+          endcase
         end
     endcase
   end
 end
 endmodule
-
