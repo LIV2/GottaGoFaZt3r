@@ -28,7 +28,7 @@ module Autoconfig (
 
 `include "globalparams.vh"
 
-`ifndef makedefines
+`ifndef SERIAL
 `define SERIAL 32'd0
 `endif
 
